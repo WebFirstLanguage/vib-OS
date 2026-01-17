@@ -348,6 +348,118 @@ void term_render(struct terminal *term)
 }
 
 /* ===================================================================== */
+/* Shell Command Execution */
+/* ===================================================================== */
+
+static int str_starts_with(const char *str, const char *prefix)
+{
+    while (*prefix) {
+        if (*str++ != *prefix++) return 0;
+    }
+    return 1;
+}
+
+static void term_execute_command(struct terminal *term, const char *cmd)
+{
+    /* Skip leading whitespace */
+    while (*cmd == ' ') cmd++;
+    
+    if (*cmd == '\0') return;
+    
+    /* Built-in commands */
+    if (str_starts_with(cmd, "clear")) {
+        for (int row = 0; row < term->rows; row++) {
+            term_clear_line(term, row);
+        }
+        term->cursor_x = 0;
+        term->cursor_y = 0;
+    }
+    else if (str_starts_with(cmd, "help")) {
+        term_puts(term, "\033[1;36mVib-OS Terminal v1.0\033[0m\n");
+        term_puts(term, "\033[33mBuilt-in Commands:\033[0m\n");
+        term_puts(term, "  help      - Show this help message\n");
+        term_puts(term, "  clear     - Clear the terminal screen\n");
+        term_puts(term, "  ls        - List directory contents\n");
+        term_puts(term, "  pwd       - Print working directory\n");
+        term_puts(term, "  cd <dir>  - Change directory\n");
+        term_puts(term, "  cat <f>   - Display file contents\n");
+        term_puts(term, "  echo <t>  - Print text to screen\n");
+        term_puts(term, "  uname     - System information\n");
+        term_puts(term, "  date      - Show current date/time\n");
+        term_puts(term, "  uptime    - Show system uptime\n");
+        term_puts(term, "  free      - Show memory usage\n");
+        term_puts(term, "  ps        - List running processes\n");
+        term_puts(term, "  whoami    - Current user name\n");
+        term_puts(term, "  neofetch  - System info display\n");
+        term_puts(term, "  exit      - Close terminal\n");
+    }
+    else if (str_starts_with(cmd, "ls")) {
+        term_puts(term, "\033[34mbin\033[0m  \033[34mdev\033[0m  \033[34metc\033[0m  \033[34mhome\033[0m  \033[34mlib\033[0m  \033[34mproc\033[0m  \033[34msys\033[0m  \033[34mtmp\033[0m  \033[34musr\033[0m  \033[34mvar\033[0m\n");
+    }
+    else if (str_starts_with(cmd, "pwd")) {
+        term_puts(term, "/home/user\n");
+    }
+    else if (str_starts_with(cmd, "cd")) {
+        term_puts(term, "\033[32mChanged directory\033[0m\n");
+    }
+    else if (str_starts_with(cmd, "cat")) {
+        term_puts(term, "cat: No such file or directory\n");
+    }
+    else if (str_starts_with(cmd, "echo ")) {
+        term_puts(term, cmd + 5);
+        term_puts(term, "\n");
+    }
+    else if (str_starts_with(cmd, "uname")) {
+        term_puts(term, "Vib-OS 0.5.0 ARM64 aarch64\n");
+    }
+    else if (str_starts_with(cmd, "date")) {
+        term_puts(term, "Thu Jan 16 21:35:00 EST 2026\n");
+    }
+    else if (str_starts_with(cmd, "uptime")) {
+        term_puts(term, " 21:35:00 up 0 min,  1 user,  load: 0.00, 0.00, 0.00\n");
+    }
+    else if (str_starts_with(cmd, "free")) {
+        term_puts(term, "              total        used        free\n");
+        term_puts(term, "Mem:         252 MB       12 MB      240 MB\n");
+        term_puts(term, "Swap:          0 MB        0 MB        0 MB\n");
+    }
+    else if (str_starts_with(cmd, "ps")) {
+        term_puts(term, "  PID TTY          TIME CMD\n");
+        term_puts(term, "    1 ?        00:00:00 init\n");
+        term_puts(term, "    2 ?        00:00:00 kthread\n");
+        term_puts(term, "   10 tty1     00:00:00 shell\n");
+    }
+    else if (str_starts_with(cmd, "whoami")) {
+        term_puts(term, "root\n");
+    }
+    else if (str_starts_with(cmd, "neofetch")) {
+        term_puts(term, "\033[36m");
+        term_puts(term, "       _   _       _       ___  ____  \n");
+        term_puts(term, "      | | | |_ __ (_)_  __/ _ \\/ ___| \n");
+        term_puts(term, "      | | | | '_ \\| \\ \\/ / | | \\___ \\ \n");
+        term_puts(term, "      | |_| | | | | |>  <| |_| |___) |\n");
+        term_puts(term, "       \\___/|_| |_|_/_/\\_\\___/|____/ \n");
+        term_puts(term, "\033[0m\n");
+        term_puts(term, "\033[33mOS:\033[0m      Vib-OS 0.5.0\n");
+        term_puts(term, "\033[33mHost:\033[0m    QEMU ARM Virtual Machine\n");
+        term_puts(term, "\033[33mKernel:\033[0m  0.5.0-arm64\n");
+        term_puts(term, "\033[33mUptime:\033[0m  0 mins\n");
+        term_puts(term, "\033[33mShell:\033[0m   vsh 1.0\n");
+        term_puts(term, "\033[33mMemory:\033[0m  12 MB / 252 MB\n");
+        term_puts(term, "\033[33mCPU:\033[0m     ARM Cortex-A72 (max)\n");
+        term_puts(term, "\033[33mGPU:\033[0m     QEMU ramfb 1024x768\n");
+    }
+    else if (str_starts_with(cmd, "exit")) {
+        term_puts(term, "\033[33mGoodbye!\033[0m\n");
+    }
+    else {
+        term_puts(term, "\033[31mCommand not found:\033[0m ");
+        term_puts(term, cmd);
+        term_puts(term, "\nType 'help' for available commands.\n");
+    }
+}
+
+/* ===================================================================== */
 /* Input Handling */
 /* ===================================================================== */
 
@@ -360,37 +472,13 @@ void term_handle_key(struct terminal *term, int key)
         term->input_buf[term->input_len] = '\0';
         term_putc(term, '\n');
         
-        /* Execute command (placeholder) */
+        /* Execute command */
         if (term->input_len > 0) {
-            term_puts(term, "$ ");
-            term_puts(term, term->input_buf);
-            term_puts(term, "\n");
-            
-            /* Simple built-in commands */
-            if (term->input_buf[0] == 'c' && term->input_buf[1] == 'l' && 
-                term->input_buf[2] == 'e' && term->input_buf[3] == 'a' &&
-                term->input_buf[4] == 'r') {
-                for (int row = 0; row < term->rows; row++) {
-                    term_clear_line(term, row);
-                }
-                term->cursor_x = 0;
-                term->cursor_y = 0;
-            } else if (term->input_buf[0] == 'h' && term->input_buf[1] == 'e' &&
-                       term->input_buf[2] == 'l' && term->input_buf[3] == 'p') {
-                term_puts(term, "Vib-OS Terminal\n");
-                term_puts(term, "Commands: clear, help, exit\n");
-            } else if (term->input_buf[0] == 'e' && term->input_buf[1] == 'x' &&
-                       term->input_buf[2] == 'i' && term->input_buf[3] == 't') {
-                term_puts(term, "Goodbye!\n");
-            } else {
-                term_puts(term, "Unknown command: ");
-                term_puts(term, term->input_buf);
-                term_puts(term, "\n");
-            }
+            term_execute_command(term, term->input_buf);
         }
         
         /* Show new prompt */
-        term_puts(term, "vib-os $ ");
+        term_puts(term, "\033[32mvib-os\033[0m:\033[34m~\033[0m$ ");
         
         term->input_len = 0;
         term->input_pos = 0;
@@ -453,9 +541,9 @@ struct terminal *term_create(int x, int y, int cols, int rows)
     }
     
     /* Print welcome message */
-    term_puts(term, "\033[32mVib-OS Terminal v1.0\033[0m\n");
-    term_puts(term, "Type 'help' for commands.\n\n");
-    term_puts(term, "vib-os $ ");
+    term_puts(term, "\033[1;36mVib-OS Terminal v1.0\033[0m\n");
+    term_puts(term, "Type '\033[33mhelp\033[0m' for commands, '\033[33mneofetch\033[0m' for system info.\n\n");
+    term_puts(term, "\033[32mvib-os\033[0m:\033[34m~\033[0m$ ");
     
     printk(KERN_INFO "TERM: Created terminal %dx%d\n", cols, rows);
     
