@@ -89,6 +89,31 @@ static void calc_button_click(char key)
     }
 }
 
+/* Notepad state (global for keyboard input) */
+#define NOTEPAD_MAX_TEXT 2048
+static char notepad_text[NOTEPAD_MAX_TEXT];
+static int notepad_cursor = 0;
+
+static void notepad_key(int key)
+{
+    if (key == '\b' || key == 127) {  /* Backspace */
+        if (notepad_cursor > 0) {
+            notepad_cursor--;
+            notepad_text[notepad_cursor] = '\0';
+        }
+    } else if (key >= 32 && key < 127) {  /* Printable */
+        if (notepad_cursor < NOTEPAD_MAX_TEXT - 1) {
+            notepad_text[notepad_cursor++] = (char)key;
+            notepad_text[notepad_cursor] = '\0';
+        }
+    } else if (key == '\n' || key == '\r') {  /* Enter */
+        if (notepad_cursor < NOTEPAD_MAX_TEXT - 1) {
+            notepad_text[notepad_cursor++] = '\n';
+            notepad_text[notepad_cursor] = '\0';
+        }
+    }
+}
+
 /* ===================================================================== */
 /* Display Driver Interface */
 /* ===================================================================== */
@@ -202,6 +227,12 @@ extern const uint8_t font_data[256][16];
 
 void gui_draw_char(int x, int y, char c, uint32_t fg, uint32_t bg)
 {
+    /* Clip to screen bounds */
+    if (x < 0 || x + FONT_WIDTH > (int)primary_display.width ||
+        y < 0 || y + FONT_HEIGHT > (int)primary_display.height) {
+        return;
+    }
+    
     unsigned char idx = (unsigned char)c;
     const uint8_t *glyph = font_data[idx];
     
@@ -216,12 +247,17 @@ void gui_draw_char(int x, int y, char c, uint32_t fg, uint32_t bg)
 
 void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg)
 {
+    int start_x = x;
     while (*str) {
         if (*str == '\n') {
-            x = 0;
+            x = start_x;
             y += FONT_HEIGHT;
         } else {
-            gui_draw_char(x, y, *str, fg, bg);
+            /* Only draw if within screen bounds */
+            if (x >= 0 && x + FONT_WIDTH <= (int)primary_display.width &&
+                y >= 0 && y + FONT_HEIGHT <= (int)primary_display.height) {
+                gui_draw_char(x, y, *str, fg, bg);
+            }
             x += FONT_WIDTH;
         }
         str++;
@@ -255,6 +291,10 @@ struct window {
     bool resizable;
     uint32_t *content_buffer;
     void *userdata;
+    
+    /* Saved position for restore from maximize */
+    int saved_x, saved_y;
+    int saved_width, saved_height;
     
     /* Callbacks */
     void (*on_draw)(struct window *win);
@@ -403,16 +443,30 @@ static void draw_window(struct window *win)
         int btn_cy = y + BORDER_WIDTH + TITLEBAR_HEIGHT / 2;  /* Center Y */
         int btn_r = 6;  /* Button radius */
         
-        /* Close button - Red */
+        /* Close button - Red with X */
         draw_circle(btn_cx, btn_cy, btn_r, COLOR_BTN_CLOSE);
+        /* Draw X icon */
+        for (int i = -2; i <= 2; i++) {
+            draw_pixel(btn_cx + i, btn_cy + i, 0x800000);
+            draw_pixel(btn_cx + i, btn_cy - i, 0x800000);
+        }
         
-        /* Minimize button - Yellow */
+        /* Minimize button - Yellow with − */
         btn_cx += 20;
         draw_circle(btn_cx, btn_cy, btn_r, COLOR_BTN_MINIMIZE);
+        /* Draw − icon */
+        for (int i = -3; i <= 3; i++) {
+            draw_pixel(btn_cx + i, btn_cy, 0x806000);
+        }
         
-        /* Zoom button - Green */
+        /* Zoom button - Green with + */
         btn_cx += 20;
         draw_circle(btn_cx, btn_cy, btn_r, COLOR_BTN_ZOOM);
+        /* Draw + icon */
+        for (int i = -3; i <= 3; i++) {
+            draw_pixel(btn_cx + i, btn_cy, 0x006000);
+            draw_pixel(btn_cx, btn_cy + i, 0x006000);
+        }
         
         /* Window title - centered */
         int title_len = 0;
@@ -516,13 +570,65 @@ static void draw_window(struct window *win)
     }
     /* Terminal */
     else if (win->title[0] == 'T' && win->title[1] == 'e' && win->title[2] == 'r') {
-        /* Terminal welcome and prompt */
+        /* Terminal welcome and prompt - clip to window width */
+        int max_x = content_x + content_w - 8;  /* Right edge */
         int yy = content_y + 8;
-        gui_draw_string(content_x + 8, yy, "Vib-OS Terminal v1.0", 0x94E2D5, THEME_BG); yy += 18;
-        gui_draw_string(content_x + 8, yy, "Type 'help' for commands, 'neofetch' for system info.", 0xCDD6F4, THEME_BG); yy += 24;
-        gui_draw_string(content_x + 8, yy, "vib-os:~$ ", 0xA6E3A1, THEME_BG);
+        
+        /* Draw each string character by character, stopping at window edge */
+        const char *line1 = "Vib-OS Terminal v1.0";
+        int tx = content_x + 8;
+        for (int i = 0; line1[i] && tx < max_x; i++, tx += 8) {
+            gui_draw_char(tx, yy, line1[i], 0x94E2D5, THEME_BG);
+        }
+        yy += 18;
+        
+        const char *line2 = "Type 'help' for commands.";
+        tx = content_x + 8;
+        for (int i = 0; line2[i] && tx < max_x; i++, tx += 8) {
+            gui_draw_char(tx, yy, line2[i], 0xCDD6F4, THEME_BG);
+        }
+        yy += 24;
+        
+        const char *prompt = "vib-os:~$ ";
+        tx = content_x + 8;
+        for (int i = 0; prompt[i] && tx < max_x; i++, tx += 8) {
+            gui_draw_char(tx, yy, prompt[i], 0xA6E3A1, THEME_BG);
+        }
         /* Cursor block */
-        gui_draw_rect(content_x + 8 + 10 * 8, yy, 8, 16, 0xCDD6F4);
+        if (tx < max_x) {
+            gui_draw_rect(tx, yy, 8, 16, 0xCDD6F4);
+        }
+    }
+    /* Notepad */
+    else if (win->title[0] == 'N' && win->title[1] == 'o' && win->title[2] == 't') {
+        /* Text editing area */
+        gui_draw_rect(content_x + 4, content_y + 4, content_w - 8, content_h - 8, 0xFFFFFF);
+        
+        /* Draw text with wrapping */
+        int tx = content_x + 8;
+        int ty = content_y + 8;
+        int max_x = content_x + content_w - 12;
+        int max_y = content_y + content_h - 20;
+        
+        for (int i = 0; i < notepad_cursor && ty < max_y; i++) {
+            char c = notepad_text[i];
+            if (c == '\n') {
+                tx = content_x + 8;
+                ty += 16;
+            } else {
+                gui_draw_char(tx, ty, c, 0x000000, 0xFFFFFF);
+                tx += 8;
+                if (tx >= max_x) {
+                    tx = content_x + 8;
+                    ty += 16;
+                }
+            }
+        }
+        
+        /* Cursor */
+        if (ty < max_y) {
+            gui_draw_rect(tx, ty, 2, 16, 0x000000);
+        }
     }
     
     /* Call window's draw callback if set */
@@ -806,6 +912,23 @@ void gui_set_mouse_buttons(int buttons)
     mouse_buttons = buttons;
 }
 
+void gui_handle_key_event(int key)
+{
+    /* Route key to focused window */
+    if (focused_window && focused_window->visible) {
+        /* Check if it's a Notepad window */
+        if (focused_window->title[0] == 'N' && 
+            focused_window->title[1] == 'o' && 
+            focused_window->title[2] == 't') {
+            notepad_key(key);
+        }
+        /* Call window's key handler if set */
+        if (focused_window->on_key) {
+            focused_window->on_key(focused_window, key);
+        }
+    }
+}
+
 /* ===================================================================== */
 /* Event Handling with Window Dragging */
 /* ===================================================================== */
@@ -887,8 +1010,38 @@ void gui_handle_mouse_event(int x, int y, int buttons)
                     return;
                 }
                 
-                /* Minimize button (second) - skip for now */
-                /* Zoom button (third) - skip for now */
+                /* Minimize button (second) */
+                int min_cx = close_cx + 20;
+                if ((x - min_cx) * (x - min_cx) + (y - btn_cy) * (y - btn_cy) <= btn_r * btn_r) {
+                    win->visible = false;
+                    win->state = WINDOW_MINIMIZED;
+                    return;
+                }
+                
+                /* Zoom/Maximize button (third) */
+                int zoom_cx = min_cx + 20;
+                if ((x - zoom_cx) * (x - zoom_cx) + (y - btn_cy) * (y - btn_cy) <= btn_r * btn_r) {
+                    if (win->state == WINDOW_MAXIMIZED) {
+                        /* Restore */
+                        win->x = win->saved_x;
+                        win->y = win->saved_y;
+                        win->width = win->saved_width;
+                        win->height = win->saved_height;
+                        win->state = WINDOW_NORMAL;
+                    } else {
+                        /* Maximize */
+                        win->saved_x = win->x;
+                        win->saved_y = win->y;
+                        win->saved_width = win->width;
+                        win->saved_height = win->height;
+                        win->x = 0;
+                        win->y = MENU_BAR_HEIGHT;
+                        win->width = primary_display.width;
+                        win->height = primary_display.height - MENU_BAR_HEIGHT - DOCK_HEIGHT;
+                        win->state = WINDOW_MAXIMIZED;
+                    }
+                    return;
+                }
                 
                 /* Start dragging if clicking on title bar */
                 if (y >= win->y + BORDER_WIDTH && 
@@ -965,8 +1118,8 @@ void gui_handle_mouse_event(int x, int y, int buttons)
                     case 2: /* Calculator */
                         gui_create_window("Calculator", spawn_x + 60, spawn_y + 40, 200, 280);
                         break;
-                    case 3: /* Paint */
-                        gui_create_window("Paint", spawn_x + 90, spawn_y + 60, 450, 380);
+                    case 3: /* Notepad */
+                        gui_create_window("Notepad", spawn_x + 90, spawn_y + 60, 450, 350);
                         break;
                     case 4: /* Help */
                         gui_create_window("Help", spawn_x + 120, spawn_y + 80, 350, 280);
@@ -978,13 +1131,6 @@ void gui_handle_mouse_event(int x, int y, int buttons)
             }
             icon_x += DOCK_ICON_SIZE + DOCK_PADDING;
         }
-    }
-}
-
-void gui_handle_key_event(int keycode, bool pressed)
-{
-    if (focused_window && focused_window->on_key && pressed) {
-        focused_window->on_key(focused_window, keycode);
     }
 }
 

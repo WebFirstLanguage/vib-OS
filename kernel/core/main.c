@@ -234,10 +234,8 @@ static void *g_active_terminal = 0;
 /* Keyboard callback wrapper */
 static void keyboard_handler(int key)
 {
-    extern void term_handle_key(void *term, int key);
-    if (g_active_terminal) {
-        term_handle_key(g_active_terminal, key);
-    }
+    extern void gui_handle_key_event(int key);
+    gui_handle_key_event(key);
 }
 
 static void start_init_process(void)
@@ -279,10 +277,11 @@ static void start_init_process(void)
         
         /* Poll for keyboard input from UART as well */
         extern int uart_getc_nonblock(void);
+        extern void gui_handle_key_event(int key);
         int c = uart_getc_nonblock();
-        if (c >= 0 && g_active_terminal) {
-            extern void term_handle_key(void *term, int key);
-            term_handle_key(g_active_terminal, c);
+        if (c >= 0) {
+            /* Route to focused window */
+            gui_handle_key_event(c);
             needs_redraw = 1;
         }
         

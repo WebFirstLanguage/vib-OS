@@ -120,6 +120,32 @@ static int mouse_x = 16384;  /* Raw 0-32767 */
 static int mouse_y = 16384;
 static uint8_t mouse_buttons = 0;
 
+/* Keyboard state */
+static volatile uint32_t *kbd_base = 0;
+static virtq_desc_t *kbd_desc = 0;
+static virtq_avail_t *kbd_avail = 0;
+static virtq_used_t *kbd_used = 0;
+static virtio_input_event_t *kbd_events = 0;
+static uint16_t kbd_last_used_idx = 0;
+static uint8_t kbd_queue_mem[4096] __attribute__((aligned(4096)));
+static virtio_input_event_t kbd_event_bufs[QUEUE_SIZE] __attribute__((aligned(16)));
+
+/* Keyboard callback */
+static void (*gui_key_callback)(int key) = 0;
+
+/* Scancode to ASCII (basic US keyboard layout) */
+static const char scancode_to_ascii[128] = {
+    0, 27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
+    '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
+    0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',
+    0, '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0,
+    '*', 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
+/* Key callback (forward declaration) */
+static void (*key_callback)(int key) = 0;
+
 /* Screen dimensions */
 #define SCREEN_WIDTH  1024
 #define SCREEN_HEIGHT 768
@@ -343,14 +369,182 @@ int mouse_init(void) {
 }
 
 /* ===================================================================== */
-/* Compatibility API for main.c */
+/* Keyboard Functions */
 /* ===================================================================== */
 
-static void (*key_callback)(int key) = 0;
+static volatile uint32_t *find_virtio_keyboard(void) {
+    for (int i = 0; i < 32; i++) {
+        volatile uint32_t *base = (volatile uint32_t *)(uintptr_t)(VIRTIO_MMIO_BASE + i * VIRTIO_MMIO_STRIDE);
+        volatile uint8_t *base8 = (volatile uint8_t *)(uintptr_t)(VIRTIO_MMIO_BASE + i * VIRTIO_MMIO_STRIDE);
+        
+        uint32_t magic = mmio_read32(base + VIRTIO_MMIO_MAGIC/4);
+        uint32_t device_id = mmio_read32(base + VIRTIO_MMIO_DEVICE_ID/4);
+        
+        if (magic != 0x74726976 || device_id != VIRTIO_DEV_INPUT) {
+            continue;
+        }
+        
+        /* Check device name for "Keyboard" */
+        base8[VIRTIO_INPUT_CFG_SELECT] = VIRTIO_INPUT_CFG_ID_NAME;
+        base8[VIRTIO_INPUT_CFG_SUBSEL] = 0;
+        mmio_barrier();
+        
+        uint8_t size = base8[VIRTIO_INPUT_CFG_SIZE];
+        char name[32] = {0};
+        for (int j = 0; j < 31 && j < size; j++) {
+            name[j] = base8[VIRTIO_INPUT_CFG_DATA + j];
+        }
+        
+        printk(KERN_INFO "KEYBOARD: Checking device: %s\n", name);
+        
+        /* Look for "Keyboard" or "keyboard" anywhere in name */
+        int found_kbd = 0;
+        for (int j = 0; name[j] && name[j+7]; j++) {
+            if ((name[j] == 'K' || name[j] == 'k') &&
+                (name[j+1] == 'e' || name[j+1] == 'E') &&
+                (name[j+2] == 'y' || name[j+2] == 'Y')) {
+                found_kbd = 1;
+                break;
+            }
+        }
+        
+        if (found_kbd) {
+            printk(KERN_INFO "KEYBOARD: Found: %s\n", name);
+            return base;
+        }
+    }
+    
+    return 0;
+}
+
+static void keyboard_poll(void) {
+    if (!kbd_base || !kbd_used) {
+        return;
+    }
+    
+    mmio_barrier();
+    uint16_t current_used = kbd_used->idx;
+    
+    while (kbd_last_used_idx != current_used) {
+        uint16_t idx = kbd_last_used_idx % QUEUE_SIZE;
+        uint32_t desc_idx = kbd_used->ring[idx].id;
+        
+        virtio_input_event_t *ev = &kbd_events[desc_idx];
+        
+        /* Process keyboard event */
+        if (ev->type == EV_KEY && ev->value == 1) {  /* Key press only */
+            if (ev->code < 128) {
+                char ascii = scancode_to_ascii[ev->code];
+                if (ascii && key_callback) {
+                    key_callback(ascii);
+                }
+            }
+        }
+        
+        /* Re-add descriptor to available ring */
+        uint16_t avail_idx = kbd_avail->idx % QUEUE_SIZE;
+        kbd_avail->ring[avail_idx] = desc_idx;
+        kbd_avail->idx++;
+        
+        kbd_last_used_idx++;
+    }
+    
+    /* Notify device */
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_NOTIFY/4, 0);
+    mmio_write32(kbd_base + VIRTIO_MMIO_INTERRUPT_ACK/4,
+            mmio_read32(kbd_base + VIRTIO_MMIO_INTERRUPT_STATUS/4));
+}
+
+static int keyboard_init(void) {
+    printk(KERN_INFO "KEYBOARD: Initializing virtio-keyboard...\n");
+    
+    kbd_base = find_virtio_keyboard();
+    if (!kbd_base) {
+        printk(KERN_WARNING "KEYBOARD: No virtio keyboard found\n");
+        return -1;
+    }
+    
+    /* Reset device */
+    mmio_write32(kbd_base + VIRTIO_MMIO_STATUS/4, 0);
+    while (mmio_read32(kbd_base + VIRTIO_MMIO_STATUS/4) != 0) {
+        asm volatile("nop");
+    }
+    
+    /* Acknowledge */
+    mmio_write32(kbd_base + VIRTIO_MMIO_STATUS/4, VIRTIO_STATUS_ACK);
+    mmio_write32(kbd_base + VIRTIO_MMIO_STATUS/4, VIRTIO_STATUS_ACK | VIRTIO_STATUS_DRIVER);
+    
+    /* Accept no special features */
+    mmio_write32(kbd_base + VIRTIO_MMIO_DRIVER_FEATURES/4, 0);
+    mmio_write32(kbd_base + VIRTIO_MMIO_STATUS/4,
+            VIRTIO_STATUS_ACK | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK);
+    
+    /* Setup queue 0 */
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_SEL/4, 0);
+    
+    uint32_t max_queue = mmio_read32(kbd_base + VIRTIO_MMIO_QUEUE_NUM_MAX/4);
+    if (max_queue < QUEUE_SIZE) {
+        printk(KERN_WARNING "KEYBOARD: Queue too small\n");
+        return -1;
+    }
+    
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_NUM/4, QUEUE_SIZE);
+    
+    /* Setup queue memory */
+    kbd_desc = (virtq_desc_t *)kbd_queue_mem;
+    kbd_avail = (virtq_avail_t *)(kbd_queue_mem + QUEUE_SIZE * sizeof(virtq_desc_t));
+    kbd_used = (virtq_used_t *)(kbd_queue_mem + 2048);
+    kbd_events = kbd_event_bufs;
+    
+    /* Set queue addresses */
+    uint64_t desc_addr = (uint64_t)(uintptr_t)kbd_desc;
+    uint64_t avail_addr = (uint64_t)(uintptr_t)kbd_avail;
+    uint64_t used_addr = (uint64_t)(uintptr_t)kbd_used;
+    
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_DESC_LOW/4, (uint32_t)desc_addr);
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_DESC_HIGH/4, (uint32_t)(desc_addr >> 32));
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_AVAIL_LOW/4, (uint32_t)avail_addr);
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_AVAIL_HIGH/4, (uint32_t)(avail_addr >> 32));
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_USED_LOW/4, (uint32_t)used_addr);
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_USED_HIGH/4, (uint32_t)(used_addr >> 32));
+    
+    /* Initialize descriptors */
+    for (int i = 0; i < QUEUE_SIZE; i++) {
+        kbd_desc[i].addr = (uint64_t)(uintptr_t)&kbd_events[i];
+        kbd_desc[i].len = sizeof(virtio_input_event_t);
+        kbd_desc[i].flags = DESC_F_WRITE;
+        kbd_desc[i].next = 0;
+    }
+    
+    /* Fill available ring */
+    kbd_avail->flags = 0;
+    for (int i = 0; i < QUEUE_SIZE; i++) {
+        kbd_avail->ring[i] = i;
+    }
+    kbd_avail->idx = QUEUE_SIZE;
+    
+    /* Queue ready */
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_READY/4, 1);
+    
+    /* Driver OK */
+    mmio_write32(kbd_base + VIRTIO_MMIO_STATUS/4,
+            VIRTIO_STATUS_ACK | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK | VIRTIO_STATUS_DRIVER_OK);
+    
+    /* Notify device */
+    mmio_write32(kbd_base + VIRTIO_MMIO_QUEUE_NOTIFY/4, 0);
+    
+    printk(KERN_INFO "KEYBOARD: Virtio keyboard initialized!\n");
+    return 0;
+}
+
+/* ===================================================================== */
+/* Compatibility API for main.c */
+/* ===================================================================== */
 
 int input_init(void) {
     printk(KERN_INFO "INPUT: Initializing input system\n");
     mouse_init();
+    keyboard_init();
     printk(KERN_INFO "INPUT: Ready\n");
     return 0;
 }
@@ -366,6 +560,9 @@ void input_poll(void) {
     if (c >= 0 && key_callback) {
         key_callback(c);
     }
+    
+    /* Poll virtio keyboard */
+    keyboard_poll();
     
     /* Poll mouse */
     mouse_poll();

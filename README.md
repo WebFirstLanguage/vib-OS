@@ -6,11 +6,11 @@
 ![Platform](https://img.shields.io/badge/platform-ARM64-blue)
 ![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%20%7C%20M2%20%7C%20M3-orange)
 ![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-4%20%7C%205-red)
-![Lines](https://img.shields.io/badge/lines-15.5k+-yellow)
+![Lines](https://img.shields.io/badge/lines-18k+-yellow)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ```
-        _  _         ___  ____  
+        _  _         ___  ____ 
  __   _(_)| |__     / _ \/ ___| 
  \ \ / / || '_ \   | | | \___ \ 
   \ V /| || |_) |  | |_| |___) |
@@ -21,75 +21,83 @@ Vib-OS v0.5.0 - ARM64 with Full GUI
 
 ## Overview
 
-Vib-OS is a from-scratch, production-grade Unix-like operating system for ARM64. Built with **15,500+ lines** of C and Assembly:
+Vib-OS is a from-scratch, production-grade Unix-like operating system for ARM64. Built with **18,000+ lines** of C and Assembly:
 
-- ✅ **Full GUI System** - Window manager, terminal, apps
-- ✅ **APFS + ext4** - Read macOS and Linux filesystems
-- ✅ **USB 3.x + Bluetooth** - XHCI and HCI drivers
-- ✅ **Full TCP/IP Stack** - Ethernet, ARP, IP, ICMP, UDP, TCP, DNS
+- ✅ **macOS-style GUI** - Window manager with traffic light buttons, dock, menu bar
+- ✅ **Double-Buffered Compositor** - Flicker-free rendering
+- ✅ **Virtio Input** - Mouse (tablet) and keyboard support
+- ✅ **Applications** - Terminal, Calculator, File Manager, Notepad
+- ✅ **Full TCP/IP Stack** - Ethernet, ARP, IP, TCP, UDP, DNS
 - ✅ **Apple Silicon + Raspberry Pi** - M1/M2/M3 and Pi 4/5
-- ✅ **Python 3.12 + Node.js 20** - Runtime build scripts
-
-## Supported Platforms
-
-| Platform | Status | Notes |
-|----------|--------|-------|
-| **QEMU ARM64** | ✅ Tested | Primary development target |
-| **VirtualBox** | ✅ Supported | Use `scripts/create-iso.sh` |
-| **UTM (macOS)** | ✅ Supported | ARM64 native on Apple Silicon |
-| **Apple M1/M2/M3** | ✅ Supported | All variants |
-| **Raspberry Pi 4/5** | ✅ Supported | BCM2711/BCM2712 |
-| **Generic ARM64** | ✅ Supported | Any ARMv8-A |
 
 ## Quick Start
 
-### Build & Run in QEMU
+### Build & Run with GUI
 
 ```bash
 git clone git@github.com:viralcode/vib-OS.git
 cd vib-OS
 
 make kernel
-make run
+make run-gui    # Launch with GUI display
 ```
 
-### Run in VirtualBox
+### Run in QEMU (Terminal Only)
 
 ```bash
-# Create bootable ISO
-./scripts/create-iso.sh
-
-# Then in VirtualBox:
-# 1. Create new VM (Other/Unknown 64-bit)
-# 2. Memory: 2GB+
-# 3. Storage > Add ISO: build/vib-os.iso
-# 4. Start!
+make run        # Text mode
 ```
 
-### Run in UTM (macOS ARM64)
+## Screenshot
 
-1. Download [UTM](https://mac.getutm.app/)
-2. Create VM → Emulate → ARM64
-3. Add kernel: `build/kernel/unixos.elf`
-4. Start
+The OS features a modern macOS-inspired desktop with:
+- **Menu Bar** - Vib-OS branding, File/Edit/View/Help menus, clock
+- **Dock** - Quick launch: Terminal, Files, Calculator, Notepad, Help
+- **Windows** - Draggable with traffic light buttons (close/minimize/maximize)
+- **Double Buffering** - Smooth, tear-free rendering
 
 ## Features
+
+### GUI System
+| Component | Status |
+|-----------|--------|
+| Window Manager | ✅ Draggable windows, focus, z-order |
+| Traffic Light Buttons | ✅ Close (×), Minimize (−), Maximize (+) |
+| Menu Bar | ✅ Click to open apps |
+| Dock | ✅ 5 app launchers with icons |
+| Compositor | ✅ Double-buffered, optimized |
+
+### Applications
+| App | Features |
+|-----|----------|
+| **Terminal** | VT100 emulation, command prompt |
+| **Calculator** | Full arithmetic (+−×÷), chained operations |
+| **Files** | Directory browser |
+| **Notepad** | Text editor with keyboard input |
+| **Help** | Usage instructions |
+
+### Input Drivers
+| Device | Status |
+|--------|--------|
+| Virtio Tablet (mouse) | ✅ Absolute positioning |
+| Virtio Keyboard | ✅ Scancode to ASCII |
+| UART | ✅ Serial console input |
 
 ### Kernel
 | Component | Status |
 |-----------|--------|
-| MMU (4-level page tables) | ✅ |
-| GIC v3 | ✅ |
-| Scheduler + Signals | ✅ |
-| Fork/Exec + ELF loading | ✅ |
-| Boot config + Splash | ✅ |
+| MMU (4-level pages) | ✅ |
+| GIC v3 Interrupts | ✅ |
+| Buddy Allocator PMM | ✅ |
+| Kernel Heap (kmalloc) | ✅ 8MB heap |
+| Scheduler | ✅ |
 
 ### Filesystems
 | FS | Status |
 |----|--------|
 | VFS + ramfs | ✅ |
 | ext4 | ✅ |
-| **APFS (read-only)** | ✅ |
+| APFS (read-only) | ✅ |
 
 ### Networking
 | Layer | Status |
@@ -97,62 +105,45 @@ make run
 | Ethernet/ARP/IP/ICMP | ✅ |
 | UDP/TCP | ✅ |
 | DNS resolver | ✅ |
-| BSD Sockets | ✅ |
-
-### Drivers
-| Driver | Status |
-|--------|--------|
-| Apple AGX GPU | ✅ |
-| Apple ANS NVMe | ✅ |
-| Raspberry Pi 4/5 | ✅ |
-| **USB 3.x (XHCI)** | ✅ |
-| **Bluetooth (HCI)** | ✅ |
-
-### GUI System
-| Component | Status |
-|-----------|--------|
-| Window Manager | ✅ |
-| Double-buffered Compositor | ✅ |
-| VT100 Terminal | ✅ |
-| Applications (Files, Editor, Settings) | ✅ |
-
-### Runtime Ports
-| Runtime | Status |
-|---------|--------|
-| musl libc | ✅ Build script |
-| CPython 3.12 | ✅ Build script |
-| Node.js 20 | ✅ Build script |
 
 ## Project Structure
 
 ```
-Vib-OS/                     15,540+ lines
+vib-OS/
 ├── kernel/
-│   ├── gui/               Window manager, terminal, apps
-│   ├── net/               TCP/IP, DNS, sockets
-│   ├── fs/                VFS, ramfs, ext4, APFS
-│   └── ...
+│   ├── core/          # Main, panic, init
+│   ├── gui/           # Window manager, compositor
+│   │   ├── window.c   # Windows, dock, menu bar
+│   │   ├── terminal.c # VT100 terminal
+│   │   └── font.c     # 8x16 bitmap font
+│   ├── mm/            # Memory management
+│   └── net/           # TCP/IP stack
 ├── drivers/
-│   ├── gpu/               Apple AGX
-│   ├── nvme/              Apple ANS
-│   ├── usb/               XHCI
-│   ├── bluetooth/         HCI
-│   └── platform/          Raspberry Pi
-├── userspace/             Init, shell
-├── libc/                  musl build
-├── runtimes/              Python, Node.js builds
-└── scripts/               ISO creation, utilities
+│   ├── input/         # Virtio tablet & keyboard
+│   ├── gpu/           # Framebuffer, ramfb
+│   └── platform/      # RPi, Apple Silicon
+├── userspace/         # Init, shell
+└── scripts/           # Build utilities
 ```
 
 ## Build Commands
 
 ```bash
-make clean          # Clean
-make kernel         # Build kernel
+make clean          # Clean build
+make kernel         # Build kernel only
 make all            # Build everything
-make run            # Run in QEMU
-./scripts/create-iso.sh  # Create bootable ISO
+make run            # Run text mode
+make run-gui        # Run with GUI display
 ```
+
+## Platforms
+
+| Platform | Status |
+|----------|--------|
+| QEMU ARM64 | ✅ Primary target |
+| UTM (macOS) | ✅ Apple Silicon |
+| Apple M1/M2/M3 | ✅ |
+| Raspberry Pi 4/5 | ✅ |
 
 ## License
 
