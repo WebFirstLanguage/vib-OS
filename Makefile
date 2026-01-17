@@ -21,24 +21,43 @@ RUNTIMES_DIR := $(ROOT_DIR)/runtimes
 IMAGE_DIR := $(ROOT_DIR)/image
 SYSROOT := $(BUILD_DIR)/sysroot
 
-# Toolchain - prefer LLVM/Clang for ARM64
-LLVM_PATH := /opt/homebrew/opt/llvm/bin
-BREW_PATH := /opt/homebrew/bin
-export PATH := $(LLVM_PATH):$(BREW_PATH):$(PATH)
+# Detect OS
+UNAME_S := $(shell uname -s)
 
-CC := $(LLVM_PATH)/clang
-AS := $(LLVM_PATH)/clang
-LD := $(BREW_PATH)/ld.lld
-AR := $(LLVM_PATH)/llvm-ar
-OBJCOPY := $(LLVM_PATH)/llvm-objcopy
-OBJDUMP := $(LLVM_PATH)/llvm-objdump
+# Toolchain - Support both macOS (Homebrew) and Linux (system/apt)
+ifeq ($(UNAME_S),Darwin)
+    # macOS with Homebrew
+    LLVM_PATH ?= /opt/homebrew/opt/llvm/bin
+    BREW_PATH ?= /opt/homebrew/bin
+    export PATH := $(LLVM_PATH):$(BREW_PATH):$(PATH)
+    CC := $(LLVM_PATH)/clang
+    AS := $(LLVM_PATH)/clang
+    LD := $(BREW_PATH)/ld.lld
+    AR := $(LLVM_PATH)/llvm-ar
+    OBJCOPY := $(LLVM_PATH)/llvm-objcopy
+    OBJDUMP := $(LLVM_PATH)/llvm-objdump
+else
+    # Linux (Ubuntu/Debian/etc.) - use system LLVM or allow override
+    LLVM_PATH ?= /usr/bin
+    # Check if clang exists, otherwise use it with full path
+    ifeq ($(shell which clang 2>/dev/null),)
+        $(error "Clang not found! Run: sudo apt install clang lld")
+    endif
+    CC := clang
+    AS := clang
+    LD := ld.lld
+    AR := llvm-ar
+    OBJCOPY := llvm-objcopy
+    OBJDUMP := llvm-objdump
+endif
 
 # Cross-compilation target
 CROSS_TARGET := --target=aarch64-unknown-none-elf
 
 # Compiler flags
+# CPU target: generic works on QEMU and most ARM64 hardware
 CFLAGS_COMMON := -Wall -Wextra -Wno-unused-function -ffreestanding -fno-stack-protector \
-                 -fno-pic -mcpu=apple-m2 -O2 -g
+                 -fno-pic -mcpu=cortex-a72 -O2 -g
 
 CFLAGS_KERNEL := $(CFLAGS_COMMON) $(CROSS_TARGET) \
                  -I$(KERNEL_DIR)/include \
@@ -256,7 +275,11 @@ run-gui: kernel
 
 toolchain:
 	@echo "[TOOLCHAIN] Installing build dependencies..."
-	@./scripts/setup-toolchain.sh
+	@if [ "$(UNAME_S)" = "Darwin" ]; then \
+		./scripts/setup-toolchain.sh; \
+	else \
+		./scripts/setup-toolchain-linux.sh; \
+	fi
 
 # ============================================================================
 # Clean

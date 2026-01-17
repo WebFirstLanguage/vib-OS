@@ -38,7 +38,13 @@ Vib-OS is a from-scratch,  Unix-like operating system for ARM64. Built with **18
 git clone git@github.com:viralcode/vib-OS.git
 cd vib-OS
 
+# Install dependencies (auto-detects macOS/Linux)
+make toolchain
+
+# Build kernel
 make kernel
+
+# Run with GUI
 make run-gui    # Launch with GUI display
 ```
 
@@ -46,6 +52,17 @@ make run-gui    # Launch with GUI display
 
 ```bash
 make run        # Text mode
+```
+
+### Linux (Ubuntu/Debian) Instructions
+
+See [BUILD_LINUX.md](BUILD_LINUX.md) for detailed Linux setup guide.
+
+Quick start on Ubuntu:
+```bash
+sudo apt install clang lld qemu-system-arm make
+make kernel
+make run-gui
 ```
 
 ## Screenshot
