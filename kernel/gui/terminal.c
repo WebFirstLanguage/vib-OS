@@ -313,7 +313,7 @@ void term_puts(struct terminal *term, const char *str)
 
 void term_render(struct terminal *term)
 {
-    if (!term || !term->window) return;
+    if (!term) return;
     
     int base_x = term->content_x + TERM_PADDING;
     int base_y = term->content_y + TERM_PADDING;

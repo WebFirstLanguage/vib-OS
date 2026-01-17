@@ -2,6 +2,7 @@
  * UnixOS Kernel - Kernel Heap Allocator Implementation
  * 
  * A simple bucket-based allocator for kernel memory.
+ * Fixed to use direct memory region like VibeOS for reliability.
  */
 
 #include "mm/kmalloc.h"
@@ -12,9 +13,13 @@
 /* Configuration */
 /* ===================================================================== */
 
-#define HEAP_SIZE           (16 * 1024 * 1024)  /* 16MB kernel heap */
+#define HEAP_SIZE           (8 * 1024 * 1024)   /* 8MB kernel heap */
 #define MIN_ALLOC           32                   /* Minimum allocation size */
 #define MAX_ALLOC           (1024 * 1024)        /* Maximum single allocation (1MB) */
+
+/* Fixed heap location - after kernel at 0x42000000 */
+/* Kernel loads at 0x40200000, so 0x42000000 gives 30MB for kernel code/data */
+#define HEAP_BASE           0x42000000
 
 /* Block header */
 struct block_header {
@@ -81,22 +86,9 @@ static inline struct block_header *data_to_block(void *ptr)
 
 void kmalloc_init(void)
 {
-    printk(KERN_INFO "KMALLOC: Initializing kernel heap\n");
-    
-    /* Allocate heap pages */
-    size_t pages_needed = HEAP_SIZE / PAGE_SIZE;
-    unsigned int order = 0;
-    while ((1UL << order) < pages_needed) {
-        order++;
-    }
-    
-    phys_addr_t heap_phys = pmm_alloc_pages(order);
-    if (!heap_phys) {
-        printk(KERN_ERR "KMALLOC: Failed to allocate heap pages!\n");
-        return;
-    }
-    
-    heap_start = (uint8_t *)heap_phys;  /* Identity mapped */
+    /* Use fixed memory region - no PMM dependency */
+    /* This is like how VibeOS does it - simple and reliable */
+    heap_start = (uint8_t *)HEAP_BASE;
     heap_end = heap_start + HEAP_SIZE;
     heap_total = HEAP_SIZE;
     heap_used = 0;

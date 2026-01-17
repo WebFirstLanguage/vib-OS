@@ -47,6 +47,48 @@
 #define COLOR_DOCK_BORDER   0x5C5C5C
 #define DOCK_HEIGHT         70
 
+/* Calculator state (global for click handling) */
+static long calc_display = 0;
+static long calc_pending = 0;
+static char calc_op = 0;
+static int calc_clear_next = 0;
+
+static void calc_button_click(char key)
+{
+    if (key >= '0' && key <= '9') {
+        int digit = key - '0';
+        if (calc_clear_next) {
+            calc_display = digit;
+            calc_clear_next = 0;
+        } else {
+            calc_display = calc_display * 10 + digit;
+        }
+    } else if (key == 'C') {
+        calc_display = 0;
+        calc_pending = 0;
+        calc_op = 0;
+        calc_clear_next = 0;
+    } else if (key == '=') {
+        if (calc_op == '+') calc_display = calc_pending + calc_display;
+        else if (calc_op == '-') calc_display = calc_pending - calc_display;
+        else if (calc_op == '*') calc_display = calc_pending * calc_display;
+        else if (calc_op == '/' && calc_display != 0) calc_display = calc_pending / calc_display;
+        calc_op = 0;
+        calc_clear_next = 1;
+    } else if (key == '+' || key == '-' || key == '*' || key == '/') {
+        if (calc_op) {
+            /* Chain operations */
+            if (calc_op == '+') calc_display = calc_pending + calc_display;
+            else if (calc_op == '-') calc_display = calc_pending - calc_display;
+            else if (calc_op == '*') calc_display = calc_pending * calc_display;
+            else if (calc_op == '/' && calc_display != 0) calc_display = calc_pending / calc_display;
+        }
+        calc_pending = calc_display;
+        calc_op = key;
+        calc_clear_next = 1;
+    }
+}
+
 /* ===================================================================== */
 /* Display Driver Interface */
 /* ===================================================================== */
@@ -387,7 +429,103 @@ static void draw_window(struct window *win)
     
     gui_draw_rect(content_x, content_y, content_w, content_h, THEME_BG);
     
-    /* Call window's draw callback */
+    /* Draw window-specific content based on title */
+    /* Calculator */
+    if (win->title[0] == 'C' && win->title[1] == 'a' && win->title[2] == 'l') {
+        /* Display */
+        gui_draw_rect(content_x + 8, content_y + 8, content_w - 16, 32, 0xFFFFFF);
+        
+        /* Display value - use global calc_display */
+        char display[16];
+        long v = calc_display;
+        int is_neg = 0;
+        if (v < 0) { is_neg = 1; v = -v; }
+        int idx = 0;
+        if (v == 0) { display[idx++] = '0'; }
+        else {
+            char tmp[16];
+            int ti = 0;
+            while (v > 0 && ti < 14) { tmp[ti++] = '0' + (v % 10); v /= 10; }
+            if (is_neg) display[idx++] = '-';
+            while (ti > 0) { display[idx++] = tmp[--ti]; }
+        }
+        display[idx] = '\0';
+        gui_draw_string(content_x + content_w - 16 - idx * 8, content_y + 16, display, 0x000000, 0xFFFFFF);
+        
+        /* Buttons 4x4 */
+        static const char *btns[4][4] = {
+            {"7", "8", "9", "/"},
+            {"4", "5", "6", "*"},
+            {"1", "2", "3", "-"},
+            {"C", "0", "=", "+"}
+        };
+        int bw = (content_w - 40) / 4;
+        int bh = (content_h - 56) / 4;
+        for (int row = 0; row < 4; row++) {
+            for (int col = 0; col < 4; col++) {
+                int bx = content_x + 8 + col * (bw + 4);
+                int by = content_y + 48 + row * (bh + 4);
+                uint32_t bg = 0xE0E0E0;
+                uint32_t fg = 0x000000;
+                if (btns[row][col][0] == '/' || btns[row][col][0] == '*' ||
+                    btns[row][col][0] == '-' || btns[row][col][0] == '+') {
+                    bg = 0xFF9500; fg = 0xFFFFFF;
+                }
+                gui_draw_rect(bx, by, bw, bh, bg);
+                gui_draw_string(bx + (bw - 8) / 2, by + (bh - 16) / 2, btns[row][col], fg, bg);
+            }
+        }
+    }
+    /* File Manager */
+    else if (win->title[0] == 'F' && win->title[1] == 'i' && win->title[2] == 'l') {
+        gui_draw_string(content_x + 10, content_y + 10, "/ (Root Directory)", 0xCDD6F4, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 32, "bin/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 52, "etc/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 72, "home/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 92, "lib/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 112, "proc/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 132, "sys/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 152, "tmp/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 172, "usr/", 0x89B4FA, THEME_BG);
+        gui_draw_string(content_x + 20, content_y + 192, "var/", 0x89B4FA, THEME_BG);
+    }
+    /* Paint */
+    else if (win->title[0] == 'P' && win->title[1] == 'a') {
+        /* Toolbar */
+        gui_draw_rect(content_x, content_y, content_w, 32, 0x404040);
+        gui_draw_string(content_x + 8, content_y + 8, "Brush [O]  Line [/]  Color:", 0xFFFFFF, 0x404040);
+        /* Color palette */
+        gui_draw_rect(content_x + 200, content_y + 4, 20, 20, 0xFF0000);
+        gui_draw_rect(content_x + 224, content_y + 4, 20, 20, 0x00FF00);
+        gui_draw_rect(content_x + 248, content_y + 4, 20, 20, 0x0000FF);
+        gui_draw_rect(content_x + 272, content_y + 4, 20, 20, 0x000000);
+        /* Canvas */
+        gui_draw_rect(content_x + 4, content_y + 36, content_w - 8, content_h - 44, 0xFFFFFF);
+    }
+    /* Help */
+    else if (win->title[0] == 'H' && win->title[1] == 'e') {
+        int yy = content_y + 10;
+        gui_draw_string(content_x + 10, yy, "Vib-OS Help", 0x89B4FA, THEME_BG); yy += 24;
+        gui_draw_string(content_x + 10, yy, "Mouse:", 0xF9E2AF, THEME_BG); yy += 18;
+        gui_draw_string(content_x + 20, yy, "- Click dock to launch apps", 0xCDD6F4, THEME_BG); yy += 16;
+        gui_draw_string(content_x + 20, yy, "- Drag titlebars to move", 0xCDD6F4, THEME_BG); yy += 16;
+        gui_draw_string(content_x + 20, yy, "- Click red button to close", 0xCDD6F4, THEME_BG); yy += 24;
+        gui_draw_string(content_x + 10, yy, "Terminal:", 0xF9E2AF, THEME_BG); yy += 18;
+        gui_draw_string(content_x + 20, yy, "- Type 'help' for commands", 0xCDD6F4, THEME_BG); yy += 16;
+        gui_draw_string(content_x + 20, yy, "- Type 'neofetch' for info", 0xCDD6F4, THEME_BG);
+    }
+    /* Terminal */
+    else if (win->title[0] == 'T' && win->title[1] == 'e' && win->title[2] == 'r') {
+        /* Terminal welcome and prompt */
+        int yy = content_y + 8;
+        gui_draw_string(content_x + 8, yy, "Vib-OS Terminal v1.0", 0x94E2D5, THEME_BG); yy += 18;
+        gui_draw_string(content_x + 8, yy, "Type 'help' for commands, 'neofetch' for system info.", 0xCDD6F4, THEME_BG); yy += 24;
+        gui_draw_string(content_x + 8, yy, "vib-os:~$ ", 0xA6E3A1, THEME_BG);
+        /* Cursor block */
+        gui_draw_rect(content_x + 8 + 10 * 8, yy, 8, 16, 0xCDD6F4);
+    }
+    
+    /* Call window's draw callback if set */
     if (win->on_draw) {
         win->on_draw(win);
     }
@@ -502,6 +640,7 @@ void gui_compose(void)
     for (struct window *win = window_stack; win; win = win->next) {
         tail = win;
     }
+    (void)tail;
     
     /* Draw from tail to head */
     /* For simplicity, just iterate normally (top window drawn last) */
@@ -516,12 +655,14 @@ void gui_compose(void)
         draw_window(draw_order[i]);
     }
     
-    /* Copy backbuffer to framebuffer */
+    /* Fast copy backbuffer to framebuffer using 64-bit transfers */
     if (primary_display.backbuffer && primary_display.framebuffer) {
-        size_t size = primary_display.pitch * primary_display.height;
-        uint32_t *src = primary_display.backbuffer;
-        uint32_t *dst = primary_display.framebuffer;
-        for (size_t i = 0; i < size / 4; i++) {
+        uint64_t *src = (uint64_t *)primary_display.backbuffer;
+        uint64_t *dst = (uint64_t *)primary_display.framebuffer;
+        size_t count64 = (primary_display.pitch * primary_display.height) / 8;
+        
+        /* Use 64-bit copies for speed (processes 2 pixels at once) */
+        for (size_t i = 0; i < count64; i++) {
             dst[i] = src[i];
         }
     }
@@ -710,6 +851,22 @@ void gui_handle_mouse_event(int x, int y, int buttons)
     /* Check if clicking on a window */
     if (!left_click) return;
     
+    /* Check menu bar clicks */
+    if (y < MENU_BAR_HEIGHT) {
+        /* Menu layout: @ Vib-OS | File | Edit | View | Help */
+        /* File is around x=96, Edit=144, View=192, Help=240 */
+        if (x >= 96 && x < 140) {
+            /* File menu - open Files window */
+            gui_create_window("Files", 150, 80, 400, 350);
+            return;
+        } else if (x >= 240 && x < 300) {
+            /* Help menu - open Help window */
+            gui_create_window("Help", 200, 100, 350, 280);
+            return;
+        }
+        return;
+    }
+    
     for (struct window *win = window_stack; win; win = win->next) {
         if (!win->visible) continue;
         
@@ -744,6 +901,35 @@ void gui_handle_mouse_event(int x, int y, int buttons)
                 }
             }
             
+            /* Handle clicks inside Calculator window */
+            if (win->title[0] == 'C' && win->title[1] == 'a' && win->title[2] == 'l') {
+                /* Calculate content area */
+                int content_x = win->x + BORDER_WIDTH;
+                int content_y = win->y + BORDER_WIDTH + TITLEBAR_HEIGHT;
+                int content_w = win->width - BORDER_WIDTH * 2;
+                int content_h = win->height - BORDER_WIDTH * 2 - TITLEBAR_HEIGHT;
+                
+                /* Button layout */
+                static const char btns[4][4] = {
+                    {'7', '8', '9', '/'},
+                    {'4', '5', '6', '*'},
+                    {'1', '2', '3', '-'},
+                    {'C', '0', '=', '+'}
+                };
+                int bw = (content_w - 40) / 4;
+                int bh = (content_h - 56) / 4;
+                
+                /* Check if click is in button area */
+                if (x >= content_x + 8 && y >= content_y + 48) {
+                    int col = (x - content_x - 8) / (bw + 4);
+                    int row = (y - content_y - 48) / (bh + 4);
+                    if (row >= 0 && row < 4 && col >= 0 && col < 4) {
+                        calc_button_click(btns[row][col]);
+                    }
+                }
+                break;
+            }
+            
             if (win->on_mouse) {
                 win->on_mouse(win, x - win->x, y - win->y, buttons);
             }
@@ -761,32 +947,33 @@ void gui_handle_mouse_event(int x, int y, int buttons)
         int icon_x = dock_x + 20;
         int icon_y_start = dock_y + (dock_h - DOCK_ICON_SIZE) / 2;
         
+        /* Window spawn position with staggering */
+        static int spawn_x = 100;
+        static int spawn_y = 80;
+        
         for (int i = 0; i < NUM_DOCK_ICONS; i++) {
             if (x >= icon_x && x < icon_x + DOCK_ICON_SIZE &&
                 y >= icon_y_start && y < icon_y_start + DOCK_ICON_SIZE) {
-                /* Clicked on icon i - create a window for it */
-                static int app_x = 100;
-                static int app_y = 80;
-                
+                /* Clicked on icon i - create window */
                 switch (i) {
                     case 0: /* Terminal */
-                        gui_create_window("Terminal", app_x, app_y, 400, 300);
+                        gui_create_window("Terminal", spawn_x, spawn_y, 400, 300);
                         break;
                     case 1: /* Files */
-                        gui_create_window("Files", app_x + 30, app_y + 30, 450, 350);
+                        gui_create_window("Files", spawn_x + 30, spawn_y + 20, 400, 350);
                         break;
                     case 2: /* Calculator */
-                        gui_create_window("Calculator", app_x + 60, app_y + 60, 250, 300);
+                        gui_create_window("Calculator", spawn_x + 60, spawn_y + 40, 200, 280);
                         break;
                     case 3: /* Paint */
-                        gui_create_window("Paint", app_x + 90, app_y + 90, 500, 400);
+                        gui_create_window("Paint", spawn_x + 90, spawn_y + 60, 450, 380);
                         break;
                     case 4: /* Help */
-                        gui_create_window("Help", app_x + 120, app_y + 120, 350, 280);
+                        gui_create_window("Help", spawn_x + 120, spawn_y + 80, 350, 280);
                         break;
                 }
-                app_x = (app_x + 50) % 300 + 100;
-                app_y = (app_y + 50) % 200 + 80;
+                spawn_x = (spawn_x + 40) % 250 + 80;
+                spawn_y = (spawn_y + 30) % 150 + 60;
                 return;
             }
             icon_x += DOCK_ICON_SIZE + DOCK_PADDING;

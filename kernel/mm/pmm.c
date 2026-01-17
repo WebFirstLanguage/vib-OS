@@ -16,7 +16,7 @@
 
 /* Initial memory layout - will be updated from DTB/UEFI */
 #define MEMORY_BASE         0x40000000  /* 1GB - typical for ARM64 */
-#define MEMORY_SIZE         (4UL * 1024 * 1024 * 1024)  /* 4GB default */
+#define MEMORY_SIZE         (256UL * 1024 * 1024)  /* 256MB - matches QEMU default */
 
 /* ===================================================================== */
 /* Static data */

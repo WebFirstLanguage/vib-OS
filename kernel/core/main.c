@@ -139,7 +139,8 @@ static void init_subsystems(void *dtb)
     
     /* Initialize kernel heap */
     printk(KERN_INFO "  Initializing kernel heap...\n");
-    /* TODO: kmalloc_init(); */
+    extern void kmalloc_init(void);
+    kmalloc_init();
     
     /* ================================================================= */
     /* Phase 3: Process Management */
@@ -253,28 +254,16 @@ static void start_init_process(void)
     extern void input_set_key_callback(void (*callback)(int key));
     extern void gui_compose(void);
     extern void gui_draw_cursor(void);
-    extern void *term_get_active(void);
-    extern void *term_create(int x, int y, int cols, int rows);
-    extern void term_render(void *term, int x, int y);
     
     input_init();
-    
-    /* Create a terminal if not exists and set as active */
-    g_active_terminal = term_get_active();
-    if (!g_active_terminal) {
-        g_active_terminal = term_create(60, 92, 45, 15);
-    }
     
     /* Connect keyboard input to terminal */
     input_set_key_callback(keyboard_handler);
     
-    printk(KERN_INFO "GUI: Event loop started - type in terminal!\n");
+    printk(KERN_INFO "GUI: Event loop started - type in terminal!\\n");
     
     /* Initial render */
     gui_compose();
-    if (g_active_terminal) {
-        term_render(g_active_terminal, 60, 92);
-    }
     gui_draw_cursor();
     
     /* Main GUI event loop */
@@ -282,9 +271,13 @@ static void start_init_process(void)
     int last_mx = 0, last_my = 0;
     int last_buttons = 0;
     int needs_redraw = 1;  /* Initial draw */
+    int cursor_only = 0;   /* Only cursor needs updating */
     
     while (1) {
-        /* Poll for keyboard input */
+        /* Poll virtio input devices (keyboard/mouse) - MUST call this! */
+        input_poll();
+        
+        /* Poll for keyboard input from UART as well */
         extern int uart_getc_nonblock(void);
         int c = uart_getc_nonblock();
         if (c >= 0 && g_active_terminal) {
@@ -304,27 +297,36 @@ static void start_init_process(void)
         
         /* Check if mouse changed */
         if (mx != last_mx || my != last_my || mbuttons != last_buttons) {
-            gui_handle_mouse_event(mx, my, mbuttons);
+            /* Only full redraw on button state change (click/release) or drag */
+            if (mbuttons != last_buttons || (mbuttons && (mx != last_mx || my != last_my))) {
+                gui_handle_mouse_event(mx, my, mbuttons);
+                needs_redraw = 1;
+            } else {
+                /* Just cursor moved - only update cursor position */
+                cursor_only = 1;
+            }
             last_mx = mx;
             last_my = my;
             last_buttons = mbuttons;
-            needs_redraw = 1;
         }
         
         /* Only redraw when needed */
         if (needs_redraw) {
             gui_compose();
-            if (g_active_terminal) {
-                term_render(g_active_terminal, 60, 92);
-            }
             gui_draw_cursor();
             needs_redraw = 0;
+            cursor_only = 0;
+        } else if (cursor_only) {
+            /* Just update cursor - much faster */
+            gui_draw_cursor();
+            cursor_only = 0;
         }
         
         frame++;
+        (void)frame;
         
-        /* Delay to reduce CPU usage and flashing */
-        for (volatile int i = 0; i < 2000; i++) { }
+        /* Frame rate limiting */
+        for (volatile int i = 0; i < 200000; i++) { }
     }
 }
 
