@@ -52,18 +52,18 @@ graph TD
     end
 
     subgraph Kernel ["Kernel (EL1)"]
-        Syscall[Syscall Interface (SVC)]
+        Syscall["Syscall Interface (SVC)"]
         
         subgraph Subsystems
             VFS[Virtual File System]
             Process[Process Scheduler]
             Net[TCP/IP Networking Stack]
-            Mem[Memory Manager (PMM/VMM)]
+            Mem["Memory Manager (PMM/VMM)"]
         end
         
         subgraph Drivers
             VirtioNet[Virtio Net]
-            VirtioInput[Virtio Input (Tablet/Kbd)]
+            VirtioInput["Virtio Input (Tablet/Kbd)"]
             GIC[GICv3 Interrupts]
             PL031[PL031 RTC]
             PL011[PL011 UART]
