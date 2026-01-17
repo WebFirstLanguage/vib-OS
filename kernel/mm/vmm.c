@@ -11,7 +11,7 @@
 /* ===================================================================== */
 
 /* Kernel page table (identity mapped initially) */
-static uint64_t *kernel_pgd __aligned(PAGE_SIZE);
+static uint64_t kernel_pgd[VMM_ENTRIES] __aligned(PAGE_SIZE) = {0};
 
 /* Pre-allocated page tables for early boot */
 #define EARLY_TABLES_COUNT  4
@@ -154,14 +154,8 @@ int vmm_init(void)
 {
     printk(KERN_INFO "VMM: Initializing virtual memory manager\n");
     
-    /* Allocate kernel page global directory */
-    kernel_pgd = alloc_page_table();
-    if (!kernel_pgd) {
-        printk(KERN_ERR "VMM: Failed to allocate PGD\n");
-        return -1;
-    }
-    
-    printk("VMM: Kernel PGD allocated\n");
+    /* Kernel PGD is a static array, already initialized */
+    printk("VMM: Kernel PGD ready\n");
     
     /* Set up MAIR (Memory Attribute Indirection Register) */
     uint64_t mair = 

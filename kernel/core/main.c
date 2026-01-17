@@ -128,8 +128,8 @@ static void init_subsystems(void *dtb)
     if (ret < 0) {
         panic("Failed to initialize physical memory manager!");
     }
-    printk(KERN_INFO "  Physical memory: %lu MB available\n", pmm_get_free_memory() / (1024 * 1024));
-    
+    printk(KERN_INFO "  About to init VMM...\n");
+
     /* Initialize virtual memory manager */
     printk(KERN_INFO "  Initializing virtual memory manager...\n");
     ret = vmm_init();
