@@ -188,7 +188,7 @@ int fb_init(void)
 {
     printk(KERN_INFO "FB: Initializing framebuffer\n");
     
-    /* Use static buffer in BSS - more reliable than PMM at early boot */
+    /* Use static buffer in BSS */
     static uint32_t static_framebuffer[1024 * 768] __attribute__((aligned(4096)));
     
     framebuffer.buffer = static_framebuffer;
@@ -207,6 +207,8 @@ int fb_init(void)
     extern int ramfb_init(uint32_t *framebuffer, uint32_t width, uint32_t height);
     if (ramfb_init(framebuffer.buffer, framebuffer.width, framebuffer.height) == 0) {
         printk(KERN_INFO "FB: QEMU ramfb display connected\n");
+    } else {
+        printk(KERN_WARNING "FB: ramfb not available, display may not work\n");
     }
     
     /* Show boot splash */

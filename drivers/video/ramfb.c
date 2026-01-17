@@ -153,7 +153,7 @@ int ramfb_setup(uint64_t fb_addr, uint32_t width, uint32_t height, uint32_t stri
     }
     
     /* Prepare configuration (all values big-endian) */
-    struct ramfb_cfg cfg;
+    static struct ramfb_cfg cfg __attribute__((aligned(4096)));
     cfg.addr = bswap64(fb_addr);
     cfg.fourcc = bswap32(DRM_FORMAT_XRGB8888);
     cfg.flags = 0;
@@ -161,11 +161,28 @@ int ramfb_setup(uint64_t fb_addr, uint32_t width, uint32_t height, uint32_t stri
     cfg.height = bswap32(height);
     cfg.stride = bswap32(stride);
     
-    /* Write configuration to fw_cfg */
-    fw_cfg_select(ramfb_selector);
-    fw_cfg_write(&cfg, sizeof(cfg));
+    /* Use DMA for write - required by modern QEMU */
+    static volatile struct {
+        uint32_t control;
+        uint32_t length;
+        uint64_t address;
+    } __attribute__((packed, aligned(4096))) dma;
     
-    printk(KERN_INFO "RAMFB: Display configured at 0x%lx\n", (unsigned long)fb_addr);
+    /* FW_CFG_DMA_CTL_SELECT = 0x08, FW_CFG_DMA_CTL_WRITE = 0x10 */
+    /* Control = (selector << 16) | SELECT | WRITE */
+    dma.control = bswap32((ramfb_selector << 16) | 0x08 | 0x10);
+    dma.length = bswap32(sizeof(cfg));
+    dma.address = bswap64((uint64_t)(uintptr_t)&cfg);
+    
+    /* Trigger DMA write by writing address to DMA register */
+    volatile uint64_t *dma_reg = (volatile uint64_t *)(fw_cfg_base + FW_CFG_DMA);
+    uint64_t dma_addr = (uint64_t)(uintptr_t)&dma;
+    *dma_reg = bswap64(dma_addr);
+    
+    /* Small delay for DMA to complete */
+    for (volatile int i = 0; i < 100000; i++) { }
+    
+    printk(KERN_INFO "RAMFB: Display configured at 0x%lx (DMA)\n", (unsigned long)fb_addr);
     
     return 0;
 }
