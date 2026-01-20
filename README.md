@@ -16,7 +16,7 @@
   \ V /| || |_) |  | |_| |___) |
    \_/ |_||_.__/    \___/|____/ 
 
-Vib-OS v0.5.0 - Multi-Architecture OS with Full GUI
+Vib-OS v2.2.0 - Multi-Architecture OS with Full GUI
 ```
 
 <p align="center">
@@ -74,6 +74,10 @@ Vib-OS is a from-scratch, Unix-like operating system with **full multi-architect
 ### Wallpaper Settings
 ![Wallpaper System](screenshots/wallpaper-system.png)
 *Customizable wallpaper system with live preview.*
+
+### Doom
+![Doom](screenshots/doom.png)
+*Classic Doom running natively with full graphics, input, and sound support.*
 
 ## 🏗 Architecture
 
