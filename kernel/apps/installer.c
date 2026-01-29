@@ -16,6 +16,28 @@
 #include "printk.h"
 #include "string.h"
 
+/* Window structure (mirrors gui/window.c) */
+struct window {
+    int id;
+    char title[64];
+    int x, y;
+    int width, height;
+    int state;
+    bool visible;
+    bool focused;
+    bool has_titlebar;
+    bool resizable;
+    uint32_t *content_buffer;
+    void *userdata;
+    int saved_x, saved_y;
+    int saved_width, saved_height;
+    void (*on_draw)(struct window *win);
+    void (*on_key)(struct window *win, int key);
+    void (*on_mouse)(struct window *win, int x, int y, int buttons);
+    void (*on_close)(struct window *win);
+    struct window *next;
+};
+
 /* Installation steps */
 typedef enum {
     INSTALL_STEP_WELCOME,
@@ -123,7 +145,7 @@ static void installer_draw(struct window *win) {
 
     /* Clear window background */
     extern void gui_draw_rect(int x, int y, int w, int h, uint32_t color);
-    gui_draw_rect(win->x, win->y + 30, win->w, win->h - 30, COLOR_BG);
+    gui_draw_rect(win->x, win->y + 30, win->width, win->height - 30, COLOR_BG);
 
     /* Draw current step */
     switch (installer_state.current_step) {
@@ -156,33 +178,33 @@ static void installer_draw(struct window *win) {
  */
 
 static void draw_welcome_screen(void) {
-    extern void gui_draw_string(int x, int y, const char *str, uint32_t color);
+    extern void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg);
 
     int base_x = installer_window->x + 50;
     int base_y = installer_window->y + 80;
 
-    gui_draw_string(base_x, base_y, "Welcome to vib-OS Installer", COLOR_FG);
-    gui_draw_string(base_x, base_y + 40, "This wizard will guide you through installing vib-OS", COLOR_FG);
-    gui_draw_string(base_x, base_y + 60, "to your computer.", COLOR_FG);
-    gui_draw_string(base_x, base_y + 100, "WARNING: This will erase all data on the target disk!", COLOR_DANGER);
+    gui_draw_string(base_x, base_y, "Welcome to vib-OS Installer", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 40, "This wizard will guide you through installing vib-OS", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 60, "to your computer.", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 100, "WARNING: This will erase all data on the target disk!", COLOR_DANGER, COLOR_BG);
 
     /* Draw Next button */
     extern void gui_draw_rect(int x, int y, int w, int h, uint32_t color);
-    int btn_x = installer_window->x + installer_window->w - 120;
-    int btn_y = installer_window->y + installer_window->h - 50;
+    int btn_x = installer_window->x + installer_window->width - 120;
+    int btn_y = installer_window->y + installer_window->height - 50;
     gui_draw_rect(btn_x, btn_y, 100, 30, COLOR_BUTTON);
-    gui_draw_string(btn_x + 25, btn_y + 10, "Next >", COLOR_BG);
+    gui_draw_string(btn_x + 25, btn_y + 10, "Next >", COLOR_BG, COLOR_BUTTON);
 }
 
 static void draw_disk_select_screen(void) {
-    extern void gui_draw_string(int x, int y, const char *str, uint32_t color);
+    extern void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg);
     extern void gui_draw_rect(int x, int y, int w, int h, uint32_t color);
 
     int base_x = installer_window->x + 50;
     int base_y = installer_window->y + 80;
 
-    gui_draw_string(base_x, base_y, "Select Installation Disk", COLOR_FG);
-    gui_draw_string(base_x, base_y + 30, "Choose the disk where vib-OS will be installed:", COLOR_FG);
+    gui_draw_string(base_x, base_y, "Select Installation Disk", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 30, "Choose the disk where vib-OS will be installed:", COLOR_FG, COLOR_BG);
 
     /* List disks */
     for (int i = 0; i < installer_state.disk_count; i++) {
@@ -200,88 +222,88 @@ static void draw_disk_select_screen(void) {
             gui_draw_rect(base_x - 10, item_y - 5, 15, 15, 0xCCCCCC);
         }
 
-        gui_draw_string(base_x + 20, item_y, disk_info, COLOR_FG);
+        gui_draw_string(base_x + 20, item_y, disk_info, COLOR_FG, COLOR_BG);
     }
 
     /* Draw buttons */
-    int btn_y = installer_window->y + installer_window->h - 50;
+    int btn_y = installer_window->y + installer_window->height - 50;
 
     /* Back button */
     gui_draw_rect(installer_window->x + 20, btn_y, 100, 30, 0xCCCCCC);
-    gui_draw_string(installer_window->x + 35, btn_y + 10, "< Back", COLOR_FG);
+    gui_draw_string(installer_window->x + 35, btn_y + 10, "< Back", COLOR_FG, COLOR_BG);
 
     /* Next button */
-    int next_x = installer_window->x + installer_window->w - 120;
+    int next_x = installer_window->x + installer_window->width - 120;
     uint32_t next_color = (installer_state.selected_disk_index >= 0) ? COLOR_BUTTON : 0x999999;
     gui_draw_rect(next_x, btn_y, 100, 30, next_color);
-    gui_draw_string(next_x + 25, btn_y + 10, "Next >", COLOR_BG);
+    gui_draw_string(next_x + 25, btn_y + 10, "Next >", COLOR_BG, COLOR_BUTTON);
 }
 
 static void draw_partition_screen(void) {
-    extern void gui_draw_string(int x, int y, const char *str, uint32_t color);
+    extern void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg);
 
     int base_x = installer_window->x + 50;
     int base_y = installer_window->y + 80;
 
-    gui_draw_string(base_x, base_y, "Partition Layout", COLOR_FG);
-    gui_draw_string(base_x, base_y + 30, "The following partitions will be created:", COLOR_FG);
+    gui_draw_string(base_x, base_y, "Partition Layout", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 30, "The following partitions will be created:", COLOR_FG, COLOR_BG);
 
-    gui_draw_string(base_x, base_y + 70, "Partition 1: ESP (EFI System) - 200 MB", COLOR_FG);
-    gui_draw_string(base_x, base_y + 95, "Partition 2: Root (/) - Remainder", COLOR_FG);
+    gui_draw_string(base_x, base_y + 70, "Partition 1: ESP (EFI System) - 200 MB", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 95, "Partition 2: Root (/) - Remainder", COLOR_FG, COLOR_BG);
 
     /* Draw buttons */
-    int btn_y = installer_window->y + installer_window->h - 50;
+    int btn_y = installer_window->y + installer_window->height - 50;
 
     extern void gui_draw_rect(int x, int y, int w, int h, uint32_t color);
     gui_draw_rect(installer_window->x + 20, btn_y, 100, 30, 0xCCCCCC);
-    gui_draw_string(installer_window->x + 35, btn_y + 10, "< Back", COLOR_FG);
+    gui_draw_string(installer_window->x + 35, btn_y + 10, "< Back", COLOR_FG, COLOR_BG);
 
-    int next_x = installer_window->x + installer_window->w - 120;
+    int next_x = installer_window->x + installer_window->width - 120;
     gui_draw_rect(next_x, btn_y, 100, 30, COLOR_BUTTON);
-    gui_draw_string(next_x + 25, btn_y + 10, "Next >", COLOR_BG);
+    gui_draw_string(next_x + 25, btn_y + 10, "Next >", COLOR_BG, COLOR_BUTTON);
 }
 
 static void draw_confirm_screen(void) {
-    extern void gui_draw_string(int x, int y, const char *str, uint32_t color);
+    extern void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg);
     extern void gui_draw_rect(int x, int y, int w, int h, uint32_t color);
 
     int base_x = installer_window->x + 50;
     int base_y = installer_window->y + 80;
 
-    gui_draw_string(base_x, base_y, "Confirm Installation", COLOR_FG);
-    gui_draw_string(base_x, base_y + 40, "ALL DATA WILL BE LOST!", COLOR_DANGER);
+    gui_draw_string(base_x, base_y, "Confirm Installation", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 40, "ALL DATA WILL BE LOST!", COLOR_DANGER, COLOR_BG);
 
     if (installer_state.selected_disk) {
         char msg[128];
         snprintf(msg, sizeof(msg), "Target disk: %s", installer_state.selected_disk->name);
-        gui_draw_string(base_x, base_y + 80, msg, COLOR_FG);
+        gui_draw_string(base_x, base_y + 80, msg, COLOR_FG, COLOR_BG);
     }
 
-    gui_draw_string(base_x, base_y + 120, "Click 'Install Now' to begin installation", COLOR_FG);
+    gui_draw_string(base_x, base_y + 120, "Click 'Install Now' to begin installation", COLOR_FG, COLOR_BG);
 
     /* Draw buttons */
-    int btn_y = installer_window->y + installer_window->h - 50;
+    int btn_y = installer_window->y + installer_window->height - 50;
 
     gui_draw_rect(installer_window->x + 20, btn_y, 100, 30, 0xCCCCCC);
-    gui_draw_string(installer_window->x + 35, btn_y + 10, "< Back", COLOR_FG);
+    gui_draw_string(installer_window->x + 35, btn_y + 10, "< Back", COLOR_FG, COLOR_BG);
 
-    int install_x = installer_window->x + installer_window->w - 150;
+    int install_x = installer_window->x + installer_window->width - 150;
     gui_draw_rect(install_x, btn_y, 130, 30, COLOR_DANGER);
-    gui_draw_string(install_x + 10, btn_y + 10, "Install Now", COLOR_BG);
+    gui_draw_string(install_x + 10, btn_y + 10, "Install Now", COLOR_BG, COLOR_BUTTON);
 }
 
 static void draw_installing_screen(void) {
-    extern void gui_draw_string(int x, int y, const char *str, uint32_t color);
+    extern void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg);
     extern void gui_draw_rect(int x, int y, int w, int h, uint32_t color);
 
     int base_x = installer_window->x + 50;
     int base_y = installer_window->y + 80;
 
-    gui_draw_string(base_x, base_y, "Installing vib-OS...", COLOR_FG);
+    gui_draw_string(base_x, base_y, "Installing vib-OS...", COLOR_FG, COLOR_BG);
 
     /* Progress bar */
     int progress_y = base_y + 50;
-    int progress_w = installer_window->w - 100;
+    int progress_w = installer_window->width - 100;
     gui_draw_rect(base_x, progress_y, progress_w, 30, COLOR_PROGRESS_BG);
 
     int filled_w = (progress_w * installer_state.progress_percent) / 100;
@@ -290,42 +312,42 @@ static void draw_installing_screen(void) {
     /* Progress percentage */
     char progress_text[32];
     snprintf(progress_text, sizeof(progress_text), "%d%%", installer_state.progress_percent);
-    gui_draw_string(base_x + progress_w / 2 - 15, progress_y + 10, progress_text, COLOR_FG);
+    gui_draw_string(base_x + progress_w / 2 - 15, progress_y + 10, progress_text, COLOR_FG, COLOR_BG);
 
     /* Current file */
     if (installer_state.current_file[0]) {
         char file_msg[128];
         snprintf(file_msg, sizeof(file_msg), "Copying: %s", installer_state.current_file);
-        gui_draw_string(base_x, progress_y + 50, file_msg, COLOR_FG);
+        gui_draw_string(base_x, progress_y + 50, file_msg, COLOR_FG, COLOR_BG);
     }
 }
 
 static void draw_complete_screen(void) {
-    extern void gui_draw_string(int x, int y, const char *str, uint32_t color);
+    extern void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg);
     extern void gui_draw_rect(int x, int y, int w, int h, uint32_t color);
 
     int base_x = installer_window->x + 50;
     int base_y = installer_window->y + 80;
 
-    gui_draw_string(base_x, base_y, "Installation Complete!", COLOR_SUCCESS);
-    gui_draw_string(base_x, base_y + 40, "vib-OS has been successfully installed.", COLOR_FG);
-    gui_draw_string(base_x, base_y + 70, "Remove the installation media and reboot.", COLOR_FG);
+    gui_draw_string(base_x, base_y, "Installation Complete!", COLOR_SUCCESS, COLOR_BG);
+    gui_draw_string(base_x, base_y + 40, "vib-OS has been successfully installed.", COLOR_FG, COLOR_BG);
+    gui_draw_string(base_x, base_y + 70, "Remove the installation media and reboot.", COLOR_FG, COLOR_BG);
 
     /* Draw Reboot button */
-    int btn_x = installer_window->x + installer_window->w - 120;
-    int btn_y = installer_window->y + installer_window->h - 50;
+    int btn_x = installer_window->x + installer_window->width - 120;
+    int btn_y = installer_window->y + installer_window->height - 50;
     gui_draw_rect(btn_x, btn_y, 100, 30, COLOR_SUCCESS);
-    gui_draw_string(btn_x + 15, btn_y + 10, "Reboot", COLOR_BG);
+    gui_draw_string(btn_x + 15, btn_y + 10, "Reboot", COLOR_BG, COLOR_BUTTON);
 }
 
 static void draw_error_screen(void) {
-    extern void gui_draw_string(int x, int y, const char *str, uint32_t color);
+    extern void gui_draw_string(int x, int y, const char *str, uint32_t fg, uint32_t bg);
 
     int base_x = installer_window->x + 50;
     int base_y = installer_window->y + 80;
 
-    gui_draw_string(base_x, base_y, "Installation Failed", COLOR_DANGER);
-    gui_draw_string(base_x, base_y + 40, installer_state.error_message, COLOR_FG);
+    gui_draw_string(base_x, base_y, "Installation Failed", COLOR_DANGER, COLOR_BG);
+    gui_draw_string(base_x, base_y + 40, installer_state.error_message, COLOR_FG, COLOR_BG);
 }
 
 /*
@@ -339,12 +361,12 @@ static void installer_mouse(struct window *win, int x, int y, int buttons) {
     if (!(buttons & 1)) return; /* Only handle left click */
 
     /* Handle button clicks based on current step */
-    int btn_y = installer_window->y + installer_window->h - 50;
+    int btn_y = installer_window->y + installer_window->height - 50;
 
     switch (installer_state.current_step) {
         case INSTALL_STEP_WELCOME:
             /* Next button */
-            if (x >= installer_window->x + installer_window->w - 120 && x <= installer_window->x + installer_window->w - 20 &&
+            if (x >= installer_window->x + installer_window->width - 120 && x <= installer_window->x + installer_window->width - 20 &&
                 y >= btn_y && y <= btn_y + 30) {
                 installer_state.current_step = INSTALL_STEP_DISK_SELECT;
             }
@@ -368,7 +390,7 @@ static void installer_mouse(struct window *win, int x, int y, int buttons) {
 
             /* Next button */
             if (installer_state.selected_disk_index >= 0 &&
-                x >= installer_window->x + installer_window->w - 120 && x <= installer_window->x + installer_window->w - 20 &&
+                x >= installer_window->x + installer_window->width - 120 && x <= installer_window->x + installer_window->width - 20 &&
                 y >= btn_y && y <= btn_y + 30) {
                 installer_state.current_step = INSTALL_STEP_PARTITION;
             }
@@ -382,7 +404,7 @@ static void installer_mouse(struct window *win, int x, int y, int buttons) {
             }
 
             /* Next button */
-            if (x >= installer_window->x + installer_window->w - 120 && x <= installer_window->x + installer_window->w - 20 &&
+            if (x >= installer_window->x + installer_window->width - 120 && x <= installer_window->x + installer_window->width - 20 &&
                 y >= btn_y && y <= btn_y + 30) {
                 installer_state.current_step = INSTALL_STEP_CONFIRM;
             }
@@ -396,7 +418,7 @@ static void installer_mouse(struct window *win, int x, int y, int buttons) {
             }
 
             /* Install Now button */
-            if (x >= installer_window->x + installer_window->w - 150 && x <= installer_window->x + installer_window->w - 20 &&
+            if (x >= installer_window->x + installer_window->width - 150 && x <= installer_window->x + installer_window->width - 20 &&
                 y >= btn_y && y <= btn_y + 30) {
                 start_installation();
             }
@@ -404,7 +426,7 @@ static void installer_mouse(struct window *win, int x, int y, int buttons) {
 
         case INSTALL_STEP_COMPLETE:
             /* Reboot button */
-            if (x >= installer_window->x + installer_window->w - 120 && x <= installer_window->x + installer_window->w - 20 &&
+            if (x >= installer_window->x + installer_window->width - 120 && x <= installer_window->x + installer_window->width - 20 &&
                 y >= btn_y && y <= btn_y + 30) {
                 printk(KERN_INFO "[INSTALLER] Reboot requested\n");
                 /* TODO: Trigger system reboot */
