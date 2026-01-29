@@ -3,6 +3,7 @@
  */
 
 #include "types.h"
+#include "stdarg.h"
 
 void *memcpy(void *dest, const void *src, size_t n) {
   uint8_t *d = (uint8_t *)dest;
@@ -108,4 +109,17 @@ int strncmp(const char *s1, const char *s2, size_t n) {
   if (n == (size_t)-1)
     return 0;
   return *(unsigned char *)s1 - *(unsigned char *)s2;
+}
+
+/* snprintf - Format string with size limit */
+int snprintf(char *str, size_t size, const char *format, ...) {
+  /* Use kvsnprintf from printk.c */
+  extern int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args);
+
+  va_list args;
+  va_start(args, format);
+  int ret = kvsnprintf(str, size, format, args);
+  va_end(args);
+
+  return ret;
 }
