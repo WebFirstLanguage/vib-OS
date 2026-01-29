@@ -7,6 +7,8 @@
 
 #include "apps/embedded_apps.h"
 #include "arch/arch.h"
+#include "core/boot_params.h"
+#include "drivers/block_dev.h"
 #include "drivers/pci.h"
 #include "drivers/uart.h"
 #include "fs/vfs.h"
@@ -48,9 +50,13 @@ void kernel_main(void *dtb) {
   /* Print boot banner */
   print_banner();
 
-  (void)dtb; /* Suppress unused warning */
   (void)__kernel_start;
   (void)__kernel_end;
+
+  /* Parse boot parameters from command line */
+  /* For now, use a default command line - in real boot, this comes from GRUB/DTB */
+  const char *cmdline = "console=ttyAMA0 root=/dev/vda2";
+  boot_params_init(cmdline);
 
   /* Initialize all kernel subsystems */
   init_subsystems(dtb);
@@ -321,6 +327,14 @@ static void init_subsystems(void *dtb) {
 
   printk(KERN_INFO "[INIT] Phase 5: Device Drivers\n");
 
+  /* Initialize block device subsystem */
+  printk(KERN_INFO "  Initializing block devices...\n");
+  block_dev_init();
+
+  /* Initialize virtio-block driver */
+  extern int virtio_block_init(void);
+  virtio_block_init();
+
   /* Initialize framebuffer driver */
   printk(KERN_INFO "  Loading framebuffer driver...\n");
   extern int fb_init(void);
@@ -343,21 +357,30 @@ static void init_subsystems(void *dtb) {
   if (fb_buffer) {
     gui_init(fb_buffer, fb_width, fb_height, fb_width * 4);
 
-    /* Create demo windows with working terminal */
-    extern struct window *gui_create_file_manager(int x, int y);
-    gui_create_window("Terminal", 50, 50, 400, 300);
+    /* Check if we should show installer (live boot mode) */
+    extern void installer_init(void);
+    extern int installer_should_show(void);
 
-    /* Create and set active terminal so keyboard input works */
-    {
-      extern struct terminal *term_create(int x, int y, int cols, int rows);
-      extern void term_set_active(struct terminal * term);
-      struct terminal *term = term_create(52, 80, 48, 15);
-      if (term) {
-        term_set_active(term);
+    if (installer_should_show()) {
+      printk(KERN_INFO "  Live boot mode - showing installer\n");
+      installer_init();
+    } else {
+      /* Create demo windows with working terminal */
+      extern struct window *gui_create_file_manager(int x, int y);
+      gui_create_window("Terminal", 50, 50, 400, 300);
+
+      /* Create and set active terminal so keyboard input works */
+      {
+        extern struct terminal *term_create(int x, int y, int cols, int rows);
+        extern void term_set_active(struct terminal * term);
+        struct terminal *term = term_create(52, 80, 48, 15);
+        if (term) {
+          term_set_active(term);
+        }
       }
-    }
 
-    gui_create_file_manager(200, 100);
+      gui_create_file_manager(200, 100);
+    }
 
     /* Compose and display desktop */
     gui_compose();

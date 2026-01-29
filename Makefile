@@ -24,7 +24,7 @@ SYSROOT := $(BUILD_DIR)/sysroot
 # Detect OS
 UNAME_S := $(shell uname -s)
 
-# Toolchain - Support both macOS (Homebrew) and Linux (system/apt)
+# Toolchain - Support macOS (Homebrew), Linux (system/apt), and Windows (LLVM)
 ifeq ($(UNAME_S),Darwin)
     # macOS with Homebrew
     LLVM_PATH ?= /opt/homebrew/opt/llvm/bin
@@ -36,6 +36,16 @@ ifeq ($(UNAME_S),Darwin)
     AR := $(LLVM_PATH)/llvm-ar
     OBJCOPY := $(LLVM_PATH)/llvm-objcopy
     OBJDUMP := $(LLVM_PATH)/llvm-objdump
+else ifneq (,$(findstring NT,$(UNAME_S)))
+    # Windows (MINGW/MSYS/Cygwin) - use installed LLVM
+    LLVM_PATH ?= /c/Program Files/LLVM/bin
+    export PATH := $(LLVM_PATH):$(PATH)
+    CC := "$(LLVM_PATH)/clang"
+    AS := "$(LLVM_PATH)/clang"
+    LD := "$(LLVM_PATH)/ld.lld"
+    AR := "$(LLVM_PATH)/llvm-ar"
+    OBJCOPY := "$(LLVM_PATH)/llvm-objcopy"
+    OBJDUMP := "$(LLVM_PATH)/llvm-objdump"
 else
     # Linux (Ubuntu/Debian/etc.) - use system LLVM or allow override
     LLVM_PATH ?= /usr/bin
@@ -139,7 +149,9 @@ $(IMAGE_DIR):
 # Kernel Build
 # ============================================================================
 
-KERNEL_SOURCES := $(shell find $(KERNEL_DIR) -name '*.c' -o -name '*.S' 2>/dev/null | grep -v '/x86_64/' | grep -v '/x86/')
+KERNEL_SOURCES := $(shell find $(KERNEL_DIR) -name '*.c' -o -name '*.S' 2>/dev/null)
+# Filter out x86 and x86_64 sources using make's filter-out
+KERNEL_SOURCES := $(filter-out %/x86_64/% %/x86/%,$(KERNEL_SOURCES))
 # Also include ARM64-specific assembly
 KERNEL_SOURCES += $(shell find $(KERNEL_DIR)/arch/arm64 -name '*.S' 2>/dev/null)
 KERNEL_OBJECTS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel/%.o,$(filter %.c,$(KERNEL_SOURCES)))
