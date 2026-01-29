@@ -6,7 +6,7 @@
 #define _FS_FAT32_H
 
 #include "drivers/block_dev.h"
-#include "fs/vfs.h"
+#include "vfs.h"
 #include "types.h"
 
 /* FAT32 Boot Sector / BPB */

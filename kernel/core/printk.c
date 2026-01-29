@@ -75,7 +75,7 @@ static int utoa(unsigned long long val, char *buf, int base, int uppercase)
 /* Simple vsnprintf implementation */
 /* ===================================================================== */
 
-static int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args)
+int kvsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 {
     char *p = buf;
     char *end = buf + size - 1;

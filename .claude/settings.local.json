@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cargo build:*)",
+      "Bash(rustc:*)",
+      "Bash(cargo:*)",
+      "WebSearch",
+      "Bash(wc:*)",
+      "Bash(xargs ls:*)",
+      "Bash(choco install:*)",
+      "Bash(winget.exe search:*)",
+      "Bash(winget.exe install:*)",
+      "Bash(export PATH=\"/c/Program Files/LLVM/bin:$PATH\")",
+      "Bash(clang:*)",
+      "Bash(make clean:*)",
+      "Bash(make:*)",
+      "Bash(\"/c/Program Files/LLVM/bin/clang\" --target=aarch64-unknown-none-elf -Wall -Wextra -Wno-unused-function -ffreestanding -fstack-protector-strong -fno-pic -mcpu=cortex-a72 -O2 -g -Ikernel/include -Ikernel -mgeneral-regs-only -fno-builtin -nostdlib -nostdinc -DARCH_ARM64 -c kernel/core/boot_params.c -o build/kernel/core/boot_params.o)",
+      "Bash(bash test_build.sh:*)",
+      "Bash(grep:*)",
+      "Bash(\"/c/Program Files/LLVM/bin/clang\" --target=aarch64-unknown-none-elf -Wall -Wextra -Wno-unused-function -ffreestanding -fstack-protector-strong -fno-pic -mcpu=cortex-a72 -O2 -g -Ikernel/include -Ikernel -mgeneral-regs-only -fno-builtin -nostdlib -nostdinc -DARCH_ARM64 -c kernel/apps/installer.c -o build/kernel/apps/installer.o)",
+      "Bash(bash:*)",
+      "Bash(choco search:*)",
+      "Bash(python3:*)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" -m pip install pycdlib)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" create_iso_python.py)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" create_iso_final.py)",
+      "Bash(wsl --version:*)",
+      "Bash(wsl --list:*)",
+      "Bash(wsl bash:*)",
+      "Bash(\"/c/Program Files/LLVM/bin/clang\" -target x86_64-unknown-none-elf -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fno-PIC -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -mcmodel=kernel -Ikernel/include -Wall -O2 -c kernel/boot/limine_boot.c -o build/boot/limine_boot.o)",
+      "Bash(\"/c/Program Files/LLVM/bin/clang\":*)",
+      "Bash(\"/c/Program Files/LLVM/bin/clang\" --version)"
+    ]
+  }
+}
