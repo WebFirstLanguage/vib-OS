@@ -14,12 +14,12 @@ echo "=== UEFI Demo OS Build Script ==="
 echo ""
 
 # Create build directories
-mkdir -p "$BUILD_DIR"/{boot,lib,drivers,gui}
+mkdir -p "$BUILD_DIR"/{boot,lib,drivers,drivers/block,gui,installer,apps,core,fs,lib/partition}
 
 # Compile kernel
 echo "[1/5] Compiling kernel..."
 
-CC="clang"
+CC="/c/Program Files/LLVM/bin/clang"
 CFLAGS="-target x86_64-unknown-none-elf -ffreestanding -fno-stack-protector \
         -fno-stack-check -fno-lto -fno-PIC -m64 -march=x86-64 \
         -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone \
@@ -33,15 +33,39 @@ $CC $CFLAGS -c kernel/gui/desktop.c -o $BUILD_DIR/gui/desktop.o 2>/dev/null
 $CC $CFLAGS -c kernel/gui/window.c -o $BUILD_DIR/gui/window.o 2>/dev/null
 $CC $CFLAGS -c kernel/gui/compositor.c -o $BUILD_DIR/gui/compositor.o 2>/dev/null
 
-echo "[2/5] Linking kernel..."
+# Installer modules
+echo "   Compiling installer modules..."
+mkdir -p $BUILD_DIR/{installer,apps,drivers/block,lib/partition,core,fs}
+$CC $CFLAGS -c kernel/core/boot_params.c -o $BUILD_DIR/core/boot_params.o 2>/dev/null
+$CC $CFLAGS -c kernel/drivers/block/block_dev.c -o $BUILD_DIR/drivers/block_dev.o 2>/dev/null
+$CC $CFLAGS -c kernel/drivers/block/virtio_block.c -o $BUILD_DIR/drivers/virtio_block.o 2>/dev/null
+$CC $CFLAGS -c kernel/lib/crc32.c -o $BUILD_DIR/lib/crc32.o 2>/dev/null
+$CC $CFLAGS -c kernel/lib/partition/gpt.c -o $BUILD_DIR/lib/gpt.o 2>/dev/null
+$CC $CFLAGS -c kernel/fs/ext4_mkfs.c -o $BUILD_DIR/fs/ext4_mkfs.o 2>/dev/null
+$CC $CFLAGS -c kernel/fs/fat32_simple.c -o $BUILD_DIR/fs/fat32_simple.o 2>/dev/null
+$CC $CFLAGS -c kernel/installer/file_copy.c -o $BUILD_DIR/installer/file_copy.o 2>/dev/null
+$CC $CFLAGS -c kernel/installer/bootloader.c -o $BUILD_DIR/installer/bootloader.o 2>/dev/null
+$CC $CFLAGS -c kernel/installer.c -o $BUILD_DIR/apps/installer.o 2>/dev/null
+
+echo "[2/5] Linking kernel with installer..."
 ld.lld -nostdlib -static -z max-page-size=0x1000 -T kernel/linker.ld \
     $BUILD_DIR/boot/limine_boot.o \
     $BUILD_DIR/lib/string.o \
+    $BUILD_DIR/lib/crc32.o \
+    $BUILD_DIR/lib/gpt.o \
     $BUILD_DIR/drivers/framebuffer.o \
+    $BUILD_DIR/drivers/block_dev.o \
+    $BUILD_DIR/drivers/virtio_block.o \
     $BUILD_DIR/gui/font.o \
     $BUILD_DIR/gui/desktop.o \
     $BUILD_DIR/gui/window.o \
     $BUILD_DIR/gui/compositor.o \
+    $BUILD_DIR/core/boot_params.o \
+    $BUILD_DIR/fs/ext4_mkfs.o \
+    $BUILD_DIR/fs/fat32_simple.o \
+    $BUILD_DIR/installer/file_copy.o \
+    $BUILD_DIR/installer/bootloader.o \
+    $BUILD_DIR/apps/installer.o \
     -o $BUILD_DIR/kernel.elf
 
 echo "   Kernel: $BUILD_DIR/kernel.elf ($(ls -lh $BUILD_DIR/kernel.elf | awk '{print $5}'))"
