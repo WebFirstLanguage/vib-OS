@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cargo build:*)",
+      "Bash(rustc:*)",
+      "Bash(cargo:*)",
+      "WebSearch",
+      "Bash(wc:*)",
+      "Bash(xargs ls:*)",
+      "Bash(choco install:*)",
+      "Bash(winget.exe search:*)",
+      "Bash(winget.exe install:*)",
+      "Bash(export PATH=\"/c/Program Files/LLVM/bin:$PATH\")",
+      "Bash(clang:*)",
+      "Bash(make clean:*)",
+      "Bash(make:*)",
+      "Bash(\"/c/Program Files/LLVM/bin/clang\" --target=aarch64-unknown-none-elf -Wall -Wextra -Wno-unused-function -ffreestanding -fstack-protector-strong -fno-pic -mcpu=cortex-a72 -O2 -g -Ikernel/include -Ikernel -mgeneral-regs-only -fno-builtin -nostdlib -nostdinc -DARCH_ARM64 -c kernel/core/boot_params.c -o build/kernel/core/boot_params.o)",
+      "Bash(bash test_build.sh:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}
